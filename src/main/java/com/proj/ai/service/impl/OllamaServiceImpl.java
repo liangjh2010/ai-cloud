@@ -50,10 +50,11 @@ public class OllamaServiceImpl implements OllamaService {
         
         long startTime = System.currentTimeMillis();
         
-        // 调用 Ollama
+        // 调用 Ollama（支持 imageBase64 和 imageUrl 两种方式）
         String response = ollamaClient.chatWithImage(
                 request.getPrompt(), 
-                request.getImage()
+                request.getImageBase64(),
+                request.getImageUrl()
         );
         
         long endTime = System.currentTimeMillis();

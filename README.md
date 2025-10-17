@@ -6,15 +6,15 @@ AI Cloud 是一个基于 Spring AI 1.0.3 的 Ollama 调用服务，为 aika_serv
 
 ### 核心功能
 
-1. **文本对话**：纯文本对话功能（用于 AI 对话、AI 点歌解析）
-2. **图片识别**：图片+文本多模态功能（用于场景识别）
+1. **文本对话**：纯文本对话功能（用于 AI 对话、AI 点歌解析）✅
+2. **图片识别**：图片+文本多模态功能（用于场景识别）✅ 已实现（使用原生 HTTP API）
 3. **统一接口**：提供 RESTful API 供 aika_server 通过 OpenFeign 调用
 
 ### 技术栈
 
 - **JDK**: 21
 - **Spring Boot**: 3.2.7
-- **Spring AI**: 1.0.3
+- **Spring AI**: 1.0.0
 - **Knife4j**: 4.4.0
 - **Ollama 模型**: qwen2.5vl:3b
 
@@ -99,9 +99,16 @@ mvn spring-boot:run
 ```json
 {
   "prompt": "请描述这张图片中的场景",
-  "image": "base64_encoded_image_data"
+  "imageBase64": "iVBORw0KGgoAAAANSUhEUgAA...",
+  "imageUrl": "https://example.com/image.jpg"
 }
 ```
+
+**参数说明**：
+- `prompt`：提示词（必填）
+- `imageBase64`：图片 Base64 编码（优先使用）
+- `imageUrl`：图片 URL（当 imageBase64 为空时使用）
+- **优先级**：imageBase64 > imageUrl，至少需要提供其中一个
 
 **响应示例**：
 ```json
@@ -109,7 +116,7 @@ mvn spring-boot:run
   "code": 200,
   "msg": "操作成功",
   "data": {
-    "response": "生日,蛋糕,派对",
+    "response": "这是一个生日派对场景，有蛋糕、气球和人物",
     "modelName": "qwen2.5vl:3b",
     "responseTime": 3500
   }
