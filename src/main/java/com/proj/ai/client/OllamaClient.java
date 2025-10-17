@@ -107,12 +107,12 @@ public class OllamaClient {
             // 2. 构建包含图片的提示词（参考案例1的方式）
             String userPrompt = "<image>" + finalImageBase64 + "</image>\n" + prompt;
             
-            // 3. 构建请求体
-            Map<String, Object> body = Map.of(
-                    "model", defaultModel,
-                    "prompt", userPrompt,
-                    "temperature", 0.1
-            );
+            // 3. 构建请求体（添加 stream: false 参数，避免流式返回）
+            Map<String, Object> body = new java.util.HashMap<>();
+            body.put("model", defaultModel);
+            body.put("prompt", userPrompt);
+            body.put("temperature", 0.1);
+            body.put("stream", false);  // 关键：设置为非流式响应
             
             // 4. 调用 Ollama 原生 API
             log.info("准备调用 Ollama API，URL: {}/api/generate", ollamaBaseUrl);
@@ -128,7 +128,12 @@ public class OllamaClient {
             log.info("Ollama 图片识别完成, 耗时: {}ms, 响应长度: {}", 
                     (endTime - startTime), result != null ? result.length() : 0);
             
-            return result != null ? result : "图片识别失败，未收到响应";
+            // 5. 解析响应，提取 response 字段
+            String finalResponse = extractResponseFromJson(result);
+            
+            log.info("模型识别结果（提取后的描述）: {}", finalResponse);
+            
+            return finalResponse;
             
         } catch (IllegalArgumentException e) {
             log.error("参数错误: {}", e.getMessage());
@@ -179,6 +184,55 @@ public class OllamaClient {
             return base64.split(",")[1];
         }
         return base64;
+    }
+    
+    /**
+     * 从 JSON 响应中提取 response 字段
+     * 
+     * @param jsonResult Ollama API 返回的 JSON 字符串
+     * @return 提取出的 response 文本
+     */
+    private String extractResponseFromJson(String jsonResult) {
+        if (jsonResult == null || jsonResult.trim().isEmpty()) {
+            log.warn("JSON结果为空");
+            return "图片识别失败，未收到响应";
+        }
+        
+        try {
+            // 简单的JSON解析，提取 "response" 字段的值
+            // 示例格式：{"model":"qwen2.5vl:3b","created_at":"...","response":"描述文本","done":true,...}
+            
+            int responseStart = jsonResult.indexOf("\"response\":\"");
+            if (responseStart == -1) {
+                log.error("未找到response字段，原始JSON: {}", jsonResult.substring(0, Math.min(500, jsonResult.length())));
+                return "解析失败：未找到response字段";
+            }
+            
+            responseStart += "\"response\":\"".length();
+            int responseEnd = jsonResult.indexOf("\"", responseStart);
+            
+            if (responseEnd == -1) {
+                log.error("未找到response字段结束位置");
+                return "解析失败：格式错误";
+            }
+            
+            String response = jsonResult.substring(responseStart, responseEnd);
+            
+            // 处理转义字符
+            response = response.replace("\\n", "\n")
+                             .replace("\\r", "\r")
+                             .replace("\\t", "\t")
+                             .replace("\\\"", "\"")
+                             .replace("\\\\", "\\");
+            
+            log.debug("成功提取response字段，长度: {}", response.length());
+            return response;
+            
+        } catch (Exception e) {
+            log.error("解析JSON失败: {}", e.getMessage(), e);
+            log.error("原始JSON（前500字符）: {}", jsonResult.substring(0, Math.min(500, jsonResult.length())));
+            return "解析失败：" + e.getMessage();
+        }
     }
     
     /**

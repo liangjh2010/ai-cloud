@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/ollama")
 @Tag(name = "Ollama 接口", description = "Ollama 大模型调用接口")
+@CrossOrigin(origins = "*")
 public class OllamaController {
     
     @Autowired
@@ -50,6 +51,7 @@ public class OllamaController {
         try {
             log.info("收到图片+文本对话请求");
             OllamaResponse response = ollamaService.chatWithImage(request);
+            log.info("图片识别成功，准备返回结果: {}", response);
             return Result.ok(response);
         } catch (Exception e) {
             log.error("图片+文本对话失败: {}", e.getMessage(), e);
@@ -65,5 +67,7 @@ public class OllamaController {
     public Result<String> health() {
         return Result.ok("AI Cloud 服务运行正常");
     }
+    
+
 }
 
