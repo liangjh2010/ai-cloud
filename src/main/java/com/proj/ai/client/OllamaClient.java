@@ -43,6 +43,10 @@ public class OllamaClient {
         log.info("初始化 OllamaClient，baseUrl: {}", ollamaBaseUrl);
         this.webClient = WebClient.builder()
                 .baseUrl(ollamaBaseUrl)
+                // 增加缓冲区大小到 10MB，避免 DataBufferLimitException
+                .codecs(configurer -> configurer
+                        .defaultCodecs()
+                        .maxInMemorySize(10 * 1024 * 1024)) // 10MB
                 .build();
         log.info("WebClient 初始化完成");
     }
@@ -107,29 +111,29 @@ public class OllamaClient {
             // 2. 构建包含图片的提示词（参考案例1的方式）
             String userPrompt = "<image>" + finalImageBase64 + "</image>\n" + prompt;
             
-            // 3. 构建请求体（添加 stream: false 参数，避免流式返回）
+            // 3. 构建请求体（使用流式响应，手动拼接结果）
             Map<String, Object> body = new java.util.HashMap<>();
             body.put("model", defaultModel);
             body.put("prompt", userPrompt);
             body.put("temperature", 0.1);
-            body.put("stream", false);  // 关键：设置为非流式响应
+            body.put("stream", true);  // 使用流式响应，逐行解析
             
-            // 4. 调用 Ollama 原生 API
+            // 4. 调用 Ollama 原生 API，使用流式处理
             log.info("准备调用 Ollama API，URL: {}/api/generate", ollamaBaseUrl);
             String result = webClient.post()
                     .uri("/api/generate")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(body)
                     .retrieve()
-                    .bodyToMono(String.class)
-                    .block(); // 同步调用，简化实现
+                    .bodyToMono(String.class) // 一次性接收所有流式数据
+                    .block(); // 同步调用
             
             long endTime = System.currentTimeMillis();
-            log.info("Ollama 图片识别完成, 耗时: {}ms, 响应长度: {}", 
-                    (endTime - startTime), result != null ? result.length() : 0);
+            log.info("Ollama 图片识别完成, 耗时: {}ms, 响应行数: {}", 
+                    (endTime - startTime), result != null ? result.split("\n").length : 0);
             
-            // 5. 解析响应，提取 response 字段
-            String finalResponse = extractResponseFromJson(result);
+            // 5. 解析流式响应，拼接所有 response 字段
+            String finalResponse = extractResponseFromStreamJson(result);
             
             log.info("模型识别结果（提取后的描述）: {}", finalResponse);
             
@@ -187,52 +191,102 @@ public class OllamaClient {
     }
     
     /**
-     * 从 JSON 响应中提取 response 字段
+     * 从流式 JSON 响应中提取并拼接所有 response 字段
      * 
-     * @param jsonResult Ollama API 返回的 JSON 字符串
-     * @return 提取出的 response 文本
+     * @param streamResult 流式返回的多行 JSON 字符串
+     * @return 拼接后的完整 response 文本
      */
-    private String extractResponseFromJson(String jsonResult) {
-        if (jsonResult == null || jsonResult.trim().isEmpty()) {
-            log.warn("JSON结果为空");
+    private String extractResponseFromStreamJson(String streamResult) {
+        if (streamResult == null || streamResult.trim().isEmpty()) {
+            log.warn("流式结果为空");
             return "图片识别失败，未收到响应";
         }
         
         try {
-            // 简单的JSON解析，提取 "response" 字段的值
-            // 示例格式：{"model":"qwen2.5vl:3b","created_at":"...","response":"描述文本","done":true,...}
+            StringBuilder fullResponse = new StringBuilder();
+            String[] lines = streamResult.split("\n");
             
-            int responseStart = jsonResult.indexOf("\"response\":\"");
-            if (responseStart == -1) {
-                log.error("未找到response字段，原始JSON: {}", jsonResult.substring(0, Math.min(500, jsonResult.length())));
-                return "解析失败：未找到response字段";
+            log.debug("开始解析流式响应，共 {} 行", lines.length);
+            
+            for (String line : lines) {
+                line = line.trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+                
+                // 每行格式：{"model":"...","created_at":"...","response":"文本片段","done":false}
+                int responseStart = line.indexOf("\"response\":\"");
+                if (responseStart == -1) {
+                    continue; // 跳过没有 response 字段的行
+                }
+                
+                responseStart += "\"response\":\"".length();
+                
+                // 找到 response 值的结束位置（注意处理转义的引号）
+                int responseEnd = findResponseEnd(line, responseStart);
+                
+                if (responseEnd == -1) {
+                    log.warn("无法找到 response 字段的结束位置，行内容: {}", line);
+                    continue;
+                }
+                
+                String responseFragment = line.substring(responseStart, responseEnd);
+                
+                // 处理转义字符
+                responseFragment = unescapeJson(responseFragment);
+                
+                fullResponse.append(responseFragment);
             }
             
-            responseStart += "\"response\":\"".length();
-            int responseEnd = jsonResult.indexOf("\"", responseStart);
+            String result = fullResponse.toString();
+            log.debug("成功拼接流式响应，总长度: {}", result.length());
             
-            if (responseEnd == -1) {
-                log.error("未找到response字段结束位置");
-                return "解析失败：格式错误";
+            if (result.isEmpty()) {
+                return "图片识别失败，未提取到有效内容";
             }
             
-            String response = jsonResult.substring(responseStart, responseEnd);
-            
-            // 处理转义字符
-            response = response.replace("\\n", "\n")
-                             .replace("\\r", "\r")
-                             .replace("\\t", "\t")
-                             .replace("\\\"", "\"")
-                             .replace("\\\\", "\\");
-            
-            log.debug("成功提取response字段，长度: {}", response.length());
-            return response;
+            return result;
             
         } catch (Exception e) {
-            log.error("解析JSON失败: {}", e.getMessage(), e);
-            log.error("原始JSON（前500字符）: {}", jsonResult.substring(0, Math.min(500, jsonResult.length())));
+            log.error("解析流式JSON失败: {}", e.getMessage(), e);
+            log.error("原始响应（前500字符）: {}", streamResult.substring(0, Math.min(500, streamResult.length())));
             return "解析失败：" + e.getMessage();
         }
+    }
+    
+    /**
+     * 找到 JSON 字符串值的结束位置（处理转义字符）
+     */
+    private int findResponseEnd(String line, int start) {
+        for (int i = start; i < line.length(); i++) {
+            char c = line.charAt(i);
+            
+            // 遇到非转义的引号，说明字符串结束
+            if (c == '"') {
+                // 检查前面是否有转义符
+                int backslashCount = 0;
+                for (int j = i - 1; j >= start && line.charAt(j) == '\\'; j--) {
+                    backslashCount++;
+                }
+                
+                // 如果反斜杠数量是偶数（包括0），说明引号没有被转义
+                if (backslashCount % 2 == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+    
+    /**
+     * 反转义 JSON 字符串
+     */
+    private String unescapeJson(String str) {
+        return str.replace("\\n", "\n")
+                  .replace("\\r", "\r")
+                  .replace("\\t", "\t")
+                  .replace("\\\"", "\"")
+                  .replace("\\\\", "\\");
     }
     
     /**
