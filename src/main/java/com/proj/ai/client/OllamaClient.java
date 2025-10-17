@@ -108,15 +108,15 @@ public class OllamaClient {
             
             log.debug("最终使用的 Base64 长度: {}", finalImageBase64.length());
             
-            // 2. 构建包含图片的提示词（参考案例1的方式）
-            String userPrompt = "<image>" + finalImageBase64 + "</image>\n" + prompt;
-            
-            // 3. 构建请求体（使用流式响应，手动拼接结果）
+            // 2. 构建请求体（使用 Ollama 官方格式：images 数组参数）
             Map<String, Object> body = new java.util.HashMap<>();
             body.put("model", defaultModel);
-            body.put("prompt", userPrompt);
+            body.put("prompt", prompt);  // 只放文本提示，不包含图片
+            body.put("images", new String[]{finalImageBase64});  // 图片单独作为数组传递（Ollama 官方格式）
             body.put("temperature", 0.1);
             body.put("stream", true);  // 使用流式响应，逐行解析
+            
+            log.debug("请求体构建完成，prompt: {}, images数组长度: 1", prompt);
             
             // 4. 调用 Ollama 原生 API，使用流式处理
             log.info("准备调用 Ollama API，URL: {}/api/generate", ollamaBaseUrl);
