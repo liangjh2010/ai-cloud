@@ -53,7 +53,7 @@ public class OllamaServiceImpl implements OllamaService {
         // 调用 Ollama（支持 imageBase64 和 imageUrl 两种方式）
         String response = ollamaClient.chatWithImage(
                 request.getPrompt(), 
-                request.getImageBase64(),
+                request.getImage(),
                 request.getImageUrl()
         );
         

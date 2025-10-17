@@ -32,12 +32,21 @@ public class OllamaController {
     @PostMapping("/chat")
     @Operation(summary = "文本对话", description = "发送纯文本请求到 Ollama")
     public Result<OllamaResponse> chat(@Valid @RequestBody OllamaChatRequest request) {
+
         try {
-            log.info("收到文本对话请求");
+            // 打印入参
+            log.info("[文本对话] 入参 -> prompt: {}", request.getPrompt());
+            // 调用服务
             OllamaResponse response = ollamaService.chat(request);
+            
+            // 打印出参
+            log.info("[文本对话] 出参 -> model: {}, response: {}",
+                response.getModelName(), response.getResponse());
+            
             return Result.ok(response);
+            
         } catch (Exception e) {
-            log.error("文本对话失败: {}", e.getMessage(), e);
+               log.error("[文本对话] 失败 ->, 错误: {}", e.getMessage(), e);
             return Result.error("文本对话失败: " + e.getMessage());
         }
     }
@@ -48,13 +57,28 @@ public class OllamaController {
     @PostMapping("/chat-with-image")
     @Operation(summary = "图片+文本对话", description = "发送图片+文本请求到 Ollama（用于场景识别）")
     public Result<OllamaResponse> chatWithImage(@Valid @RequestBody OllamaChatWithImageRequest request) {
+
         try {
-            log.info("收到图片+文本对话请求");
+            // 打印入参（图片信息简化显示）
+            String imageInfo = "";
+            if (request.getImage() != null && !request.getImage().isEmpty()) {
+                imageInfo = "Base64(长度:" + request.getImage().length() + ")";
+            } else if (request.getImageUrl() != null && !request.getImageUrl().isEmpty()) {
+                imageInfo = "URL:" + request.getImageUrl();
+            }
+            log.info("[图片识别] 入参 -> prompt: {}, image: {}", request.getPrompt(), imageInfo);
+            
+            // 调用服务
             OllamaResponse response = ollamaService.chatWithImage(request);
-            log.info("图片识别成功，准备返回结果: {}", response);
+            
+            // 打印出参
+            log.info("[图片识别] 出参 -> model: {},  response: {}",
+                response.getModelName(), response.getResponse());
+            
             return Result.ok(response);
+            
         } catch (Exception e) {
-            log.error("图片+文本对话失败: {}", e.getMessage(), e);
+            log.error("[图片识别] 失败 -> 错误: {}", e.getMessage(), e);
             return Result.error("图片+文本对话失败: " + e.getMessage());
         }
     }

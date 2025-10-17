@@ -16,7 +16,7 @@ public class OllamaChatWithImageRequest {
     private String prompt;
     
     @Schema(description = "图片 Base64 编码（优先使用）", example = "iVBORw0KGgoAAAANSUhEUgAA...")
-    private String imageBase64;
+    private String image;
     
     @Schema(description = "图片 URL（当 imageBase64 为空时使用）", example = "https://example.com/image.jpg")
     private String imageUrl;
