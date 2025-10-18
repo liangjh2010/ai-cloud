@@ -1,6 +1,5 @@
 package com.proj.ai.controller;
 
-// import com.github.xiaoymin.knife4j.annotations.ApiOperationSupport;
 import com.proj.ai.common.Result;
 import com.proj.ai.dto.OllamaChatRequest;
 import com.proj.ai.dto.OllamaChatWithImageRequest;

@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: ai-cloud
+  
+  # Spring AI Ollama 配置
+  ai:
+    ollama:
+      base-url: http://35.221.238.240:11434
+      chat:
+        options:
+          model: qwen2.5vl:3b
+          temperature: 0.7
+
+
