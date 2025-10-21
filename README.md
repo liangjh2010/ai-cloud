@@ -7,8 +7,9 @@ AI Cloud 是一个基于 Spring AI 1.0.3 的 Ollama 调用服务，为 aika_serv
 ### 核心功能
 
 1. **文本对话**：纯文本对话功能（用于 AI 对话、AI 点歌解析）✅
-2. **图片识别**：图片+文本多模态功能（用于场景识别）✅ 已实现（使用原生 HTTP API）
-3. **统一接口**：提供 RESTful API 供 aika_server 通过 OpenFeign 调用
+2. **图片识别**：图片+文本多模态功能（用于场景识别）✅
+3. **语音识别**：Whisper 语音转文字功能 ✅
+4. **统一接口**：提供 RESTful API 供 aika_server 通过 OpenFeign 调用
 
 ### 技术栈
 
@@ -17,6 +18,7 @@ AI Cloud 是一个基于 Spring AI 1.0.3 的 Ollama 调用服务，为 aika_serv
 - **Spring AI**: 1.0.0
 - **Knife4j**: 4.4.0
 - **Ollama 模型**: qwen2.5vl:3b
+- **Whisper**: whisper.cpp 语音识别服务
 
 ---
 
@@ -27,6 +29,7 @@ AI Cloud 是一个基于 Spring AI 1.0.3 的 Ollama 调用服务，为 aika_serv
 - JDK 21
 - Maven 3.6+
 - Ollama 服务（已部署在 http://35.221.238.240:11434）
+- Whisper 服务（可选，用于语音识别，默认 http://localhost:8083）
 
 ### 2. 配置文件
 
@@ -43,6 +46,13 @@ spring:
       chat:
         options:
           model: qwen2.5vl:3b
+
+# Whisper 语音识别配置
+whisper:
+  server:
+    url: http://localhost:8083
+    inference-path: /inference
+    timeout: 60000
 ```
 
 ### 3. 启动项目
@@ -138,6 +148,81 @@ mvn spring-boot:run
 
 ---
 
+## Whisper 语音识别接口
+
+### 1. 语音识别（Base64）
+
+**接口地址**：`POST /api/whisper/recognize`
+
+**请求参数**：
+```json
+{
+  "audioBase64": "UklGRiQAAABXQVZFZm10...",
+  "language": "zh",
+  "responseFormat": "json",
+  "translate": false
+}
+```
+
+**参数说明**：
+- `audioBase64`：音频文件 Base64 编码（必填）
+- `language`：语言代码，zh=中文，en=英文，auto=自动检测（默认：zh）
+- `responseFormat`：响应格式 json/text/verbose_json（默认：json）
+- `translate`：是否翻译成英文（默认：false）
+
+**响应示例**：
+```json
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {
+    "text": "你好，我想唱周杰伦的《稻香》",
+    "language": "zh",
+    "processingTime": 2500,
+    "success": true,
+    "errorMessage": null
+  }
+}
+```
+
+### 2. 语音识别（文件上传）
+
+**接口地址**：`POST /api/whisper/recognize-file`
+
+**请求参数**（multipart/form-data）：
+- `file`：音频文件（支持 mp3、wav、m4a 等格式）
+- `language`：语言代码（可选，默认：zh）
+
+**响应示例**：
+```json
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {
+    "text": "今天天气真好",
+    "language": "zh",
+    "processingTime": 1800,
+    "success": true,
+    "errorMessage": null
+  }
+}
+```
+
+### 3. Whisper 健康检查
+
+**接口地址**：`GET /api/whisper/health`
+
+**响应示例**：
+```json
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": "Whisper 语音识别服务运行正常"
+}
+```
+
+---
+
 ## 与 aika_server 集成
 
 ### 配置说明
@@ -176,19 +261,25 @@ ai-cloud/
 │   ├── common/
 │   │   └── Result.java                 # 统一返回结果
 │   ├── config/
-│   │   └── SwaggerConfig.java          # Swagger 配置
+│   │   ├── SwaggerConfig.java          # Swagger 配置
+│   │   └── WhisperConfig.java          # Whisper 配置
 │   ├── controller/
-│   │   └── OllamaController.java       # 控制器
+│   │   ├── OllamaController.java       # Ollama 控制器
+│   │   └── WhisperController.java      # Whisper 控制器
 │   ├── dto/
-│   │   ├── OllamaChatRequest.java      # 文本请求
-│   │   ├── OllamaChatWithImageRequest.java  # 图片+文本请求
-│   │   └── OllamaResponse.java         # 响应
+│   │   ├── OllamaChatRequest.java      # Ollama 文本请求
+│   │   ├── OllamaChatWithImageRequest.java  # Ollama 图片+文本请求
+│   │   ├── OllamaResponse.java         # Ollama 响应
+│   │   ├── WhisperRequest.java         # Whisper 请求
+│   │   └── WhisperResponse.java        # Whisper 响应
 │   ├── exception/
 │   │   └── GlobalExceptionHandler.java # 全局异常处理
 │   └── service/
-│       ├── OllamaService.java          # 服务接口
+│       ├── OllamaService.java          # Ollama 服务接口
+│       ├── WhisperService.java         # Whisper 服务接口
 │       └── impl/
-│           └── OllamaServiceImpl.java  # 服务实现
+│           ├── OllamaServiceImpl.java  # Ollama 服务实现
+│           └── WhisperServiceImpl.java # Whisper 服务实现
 └── src/main/resources/
     └── application.yml                 # 配置文件
 ```
@@ -201,6 +292,9 @@ ai-cloud/
 2. **响应时间**：大模型响应较慢，建议设置合理的超时时间（300秒）
 3. **日志级别**：开发环境使用 `debug`，生产环境建议使用 `info`
 4. **端口冲突**：确保 8082 端口未被占用
+5. **音频格式**：Whisper 支持 mp3、wav、m4a 等常见音频格式
+6. **文件大小**：默认支持最大 50MB 的音频文件上传
+7. **Whisper 服务**：确保 Whisper 服务已启动并可访问（默认 http://localhost:8083）
 
 ---
 
