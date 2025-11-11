@@ -5,8 +5,7 @@ spring:
   # Spring AI Ollama 配置
   ai:
     ollama:
-#      base-url: http://35.221.238.240:11434
-      base-url: http://localhost:11434
+      base-url: http://34.125.206.97:11434
       chat:
         options:
           model: qwen2.5vl:3b
@@ -16,7 +15,7 @@ spring:
 # Whisper 语音识别配置
 whisper:
   server:
-    url: http://34.92.79.150:8083
+    url: http://34.125.206.97:8083
     inference-path: /inference
     timeout: 60000  # 超时时间（毫秒）
 
